@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Six live demos of TypeSafe's Jev (System One) decision model, with Claude and Kimi as the interchangeable LLM: router, ticket triage, inbox at scale, slop filter, title scorer, cost calculator.",
+  "description": "Six live demos of TypeSafe's Jev (System One) decision model with Gemini: router, ticket triage, inbox at scale, slop filter, title scorer, cost calculator.",
   "license": "MIT",
   "author": "Mayank Aggarwal",
   "repository": {
@@ -18,10 +18,8 @@
     "jev",
     "typesafe",
     "llm-router",
-    "anthropic",
-    "claude",
-    "kimi",
-    "moonshot",
+    "gemini",
+    "google-genai",
     "demo"
   ],
   "engines": {
@@ -33,7 +31,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.127.0",
+    "@google/genai": "^2.23.0",
     "@typesafe-ai/sdk": "^0.6.0",
     "zod": "^4.6.5"
   },

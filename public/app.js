@@ -9,8 +9,8 @@ const KIND_COLORS = { breaking: "var(--k1)", golden_nugget: "var(--k3)", hot_tak
 const TIER_COLOR = { light: "var(--k2)", standard: "var(--k1)", frontier: "var(--k5)" };
 const TIERS = ["light", "standard", "frontier"];
 
-let STATUS, SAMPLES, MODELS, PROVIDER = "claude";
-const P = () => STATUS.providers[PROVIDER];
+let STATUS, SAMPLES, MODELS;
+const P = () => STATUS.gemini;
 const label = (k) => MODELS[k]?.label ?? k;
 const prices = (k) => `$${MODELS[k].inPerM} / $${MODELS[k].outPerM}`;
 const small = () => P().small, big = () => P().big;
@@ -18,7 +18,7 @@ const live = () => P().state === "live";
 
 /* ─────────── plumbing ─────────── */
 async function api(path, body) {
-  const res = await fetch(path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: PROVIDER, ...body }) } : undefined);
+  const res = await fetch(path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : undefined);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
@@ -40,13 +40,12 @@ function chips(sel, items, target) {
 const bars = (probs, colorOf) => Object.entries(probs).map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><div class="track"><div class="fill" data-w="${v * 100}" style="background:${colorOf(k)}"></div></div><b>${fmtPct(v)}</b></div>`).join("");
 const grow = (root) => requestAnimationFrame(() => requestAnimationFrame(() => root.querySelectorAll(".fill[data-w]").forEach((f) => (f.style.width = f.dataset.w + "%"))));
 
-/* ─────────── header: provider switch, status, budget ─────────── */
+/* ─────────── header: Gemini status and budget ─────────── */
 const STATE_TEXT = { live: "live", simulated: "no key", unavailable: "unavailable", budget: "budget reached" };
 function renderControls() {
   const p = P(), b = STATUS.budget, pct = Math.min(100, (b.spentUsd / b.capUsd) * 100);
   $("#controls").innerHTML = `
-    <span class="seg" role="group" aria-label="LLM provider">${Object.entries(STATUS.providers).map(([k, v]) => `<button data-provider="${k}" aria-pressed="${k === PROVIDER}">${esc(v.label)}</button>`).join("")}</span>
-    <button class="pill" id="pill-provider" title="${esc(p.note || "Provider is healthy")}${p.state !== "live" ? " (click to re-check)" : ""}"><i class="dot ${p.state === "live" ? "live" : "sim"}"></i>${esc(p.label)} <b>${STATE_TEXT[p.state]}</b></button>
+    <button class="pill" id="pill-gemini" title="${esc(p.note || "Gemini is healthy")}${p.state !== "live" ? " (click to re-check)" : ""}"><i class="dot ${p.state === "live" ? "live" : "sim"}"></i>${esc(p.label)} <b>${STATE_TEXT[p.state]}</b></button>
     <span class="pill" title="Jev (TypeSafe)"><i class="dot ${STATUS.jev === "live" ? "live" : "sim"}"></i>Jev <b>${STATUS.jev === "live" ? "live" : "no key"}</b></span>
     <span class="pill" title="Real API spend this server session. Paid LLM calls stop when the cap is reached."><span class="lbl">Budget</span><b>${fmtUsd(b.spentUsd)}</b> / ${fmtUsd(b.capUsd)}<span class="meter"><i style="width:${pct}%"></i></span><button class="chip" id="budget-up" title="Raise the cap by $0.50">+$0.50</button></span>`;
 }
@@ -54,25 +53,9 @@ async function refreshStatus() {
   try { STATUS = await api("/api/status"); renderControls(); } catch { /* server restarting */ }
 }
 document.addEventListener("click", async (e) => {
-  const sw = e.target.closest("[data-provider]");
-  if (sw) return setProvider(sw.dataset.provider);
   if (e.target.closest("#budget-up")) { STATUS = await api("/api/budget", { capUsd: STATUS.budget.capUsd + 0.5 }); renderControls(); }
-  if (e.target.closest("#pill-provider") && P().state !== "live") { await api("/api/providers/reset", {}); refreshStatus(); }
+  if (e.target.closest("#pill-gemini") && P().state !== "live") { await api("/api/gemini/reset", {}); refreshStatus(); }
 });
-function setProvider(k) {
-  PROVIDER = k;
-  try { localStorage.setItem("jev-provider", k); } catch { /* private mode */ }
-  renderControls(); rebuildProviderUi();
-}
-function rebuildProviderUi() {
-  document.querySelectorAll(".js-small").forEach((n) => (n.textContent = label(small())));
-  document.querySelectorAll(".js-big").forEach((n) => (n.textContent = label(big())));
-  if (started.has("router")) buildRouter();
-  if (started.has("triage")) buildTriage();
-  if (started.has("inbox")) buildInbox();
-  if (started.has("titles")) buildTitles();
-  if (started.has("cost")) drawCost();
-}
 
 /* ─────────── tabs ─────────── */
 const TABS = [
@@ -90,8 +73,6 @@ function showTab(id) {
 (async function boot() {
   [STATUS, SAMPLES] = await Promise.all([api("/api/status"), api("/api/samples")]);
   MODELS = STATUS.models;
-  let saved = null; try { saved = localStorage.getItem("jev-provider"); } catch { /* ignore */ }
-  PROVIDER = STATUS.providers[saved] ? saved : Object.keys(STATUS.providers).find((k) => STATUS.providers[k].state === "live") ?? "claude";
   renderControls();
   document.querySelectorAll(".js-small").forEach((n) => (n.textContent = label(small())));
   document.querySelectorAll(".js-big").forEach((n) => (n.textContent = label(big())));

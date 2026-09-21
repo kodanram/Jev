@@ -2,8 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { JEV_IN_PER_M, MODELS, PROVIDERS, budget, hasJevKey, providerState, resetDown, usable, type ProviderKey, type Tier } from "./config.ts";
-import { complete, type Effort } from "./llm.ts";
+import { GEMINI, JEV_IN_PER_M, MODELS, budget, geminiState, geminiUsable, hasJevKey, resetGemini, type Tier } from "./config.ts";
+import { complete } from "./llm.ts";
 import { decide } from "./router.ts";
 import { feedPosts, makeEmails, routerPrompts, tickets } from "./samples.ts";
 import { decideAction, draftReply, triageWithJev, triageWithLlm, type Action } from "./triage.ts";
@@ -49,41 +49,33 @@ const text = (v: unknown, field: string) => {
 const num = (v: unknown, fallback: number, min: number, max: number) =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback;
 
-const provider = (b: Record<string, unknown>): ProviderKey => {
-  if (b.provider === undefined) return "claude";
-  if (b.provider === "claude" || b.provider === "kimi") return b.provider;
-  throw new HttpError(400, `"provider" must be "claude" or "kimi"`);
-};
 const TIERS: Tier[] = ["light", "standard", "frontier"];
 const tier = (v: unknown): Tier => {
   const t = TIERS.find((x) => x === v);
   if (!t) throw new HttpError(400, `"tier" must be one of ${TIERS.join(", ")}`);
   return t;
 };
-/** Thinking effort per tier, kept low on purpose: the demo should be cheap to run. */
-const effortFor = (p: ProviderKey, t: Tier): Effort => (t === "frontier" ? (p === "kimi" ? "high" : "medium") : "low");
-
 /** POST handlers: one endpoint per pipeline stage so the UI can animate each hop as it really happens. */
 const post: Record<string, (body: Record<string, unknown>) => Promise<unknown>> = {
-  "/api/route/decide": async (b) => decide(text(b.prompt, "prompt"), provider(b)),
+  "/api/route/decide": async (b) => decide(text(b.prompt, "prompt")),
   "/api/route/answer": async (b) => {
-    const p = provider(b), t = tier(b.tier);
-    return complete(PROVIDERS[p].tiers[t], text(b.prompt, "prompt"), { effort: effortFor(p, t) });
+    const t = tier(b.tier);
+    return complete(GEMINI.tiers[t], text(b.prompt, "prompt"));
   },
   "/api/triage/jev": async (b) => {
     const jev = await triageWithJev(text(b.ticket, "ticket"));
     return { jev, ...decideAction(jev.triage) };
   },
-  "/api/triage/llm": async (b) => triageWithLlm(text(b.ticket, "ticket"), provider(b)),
-  "/api/triage/reply": async (b) => draftReply(text(b.ticket, "ticket"), text(b.department, "department"), text(b.action, "action") as Action, provider(b)),
+  "/api/triage/llm": async (b) => triageWithLlm(text(b.ticket, "ticket")),
+  "/api/triage/reply": async (b) => draftReply(text(b.ticket, "ticket"), text(b.department, "department"), text(b.action, "action") as Action),
   "/api/inbox/jev": async (b) => classifyEmailWithJev(text(b.email, "email")),
-  "/api/inbox/llm": async (b) => classifyEmailWithLlm(text(b.email, "email"), provider(b)),
+  "/api/inbox/llm": async (b) => classifyEmailWithLlm(text(b.email, "email")),
   "/api/feed/label": async (b) => labelPost(text(b.post, "post")),
-  "/api/titles/generate": async (b) => generateTitles(text(b.topic, "topic"), num(b.n, 8, 3, 16), provider(b)),
+  "/api/titles/generate": async (b) => generateTitles(text(b.topic, "topic"), num(b.n, 8, 3, 16)),
   "/api/titles/score": async (b) => scoreTitle(text(b.title, "title"), text(b.topic, "topic")),
-  "/api/providers/reset": async (b) => {
-    resetDown(provider(b));
-    await probe(provider(b));
+  "/api/gemini/reset": async () => {
+    resetGemini();
+    await probe();
     return status();
   },
   "/api/budget": async (b) => {
@@ -93,18 +85,16 @@ const post: Record<string, (body: Record<string, unknown>) => Promise<unknown>> 
 };
 
 /** One-token call that lets a bad key or spend cap surface immediately instead of on the first demo click. */
-async function probe(p: ProviderKey) {
-  if (!usable(p)) return;
-  try { await complete(PROVIDERS[p].small, "hi", { maxTokens: 1 }); } catch { /* transient errors are fine here */ }
+async function probe() {
+  if (!geminiUsable()) return;
+  try { await complete(GEMINI.small, "hi", { maxTokens: 1 }); } catch { /* transient errors are fine here */ }
 }
 
 const status = () => ({
   jev: hasJevKey() ? "live" : "simulated",
   jevInPerM: JEV_IN_PER_M,
   models: MODELS,
-  providers: Object.fromEntries(
-    (Object.keys(PROVIDERS) as ProviderKey[]).map((k) => [k, { ...PROVIDERS[k], ...providerState(k) }]),
-  ),
+  gemini: { ...GEMINI, ...geminiState() },
   budget: { spentUsd: budget.spent(), capUsd: budget.cap() },
 });
 
@@ -147,9 +137,7 @@ createServer(async (req, res) => {
   const port = process.env.PORT ?? 3000;
   console.log(`Jev demos on http://localhost:${port}`);
   console.log(`  Jev (TypeSafe): ${hasJevKey() ? "live" : "SIMULATED (set TYPESAFE_API_KEY)"}`);
-  for (const k of Object.keys(PROVIDERS) as ProviderKey[]) console.log(`  ${PROVIDERS[k].label.padEnd(14)}: ${providerState(k).state}`);
-  void Promise.all((Object.keys(PROVIDERS) as ProviderKey[]).map(probe)).then(() =>
-    console.log("  Probe:          " + (Object.keys(PROVIDERS) as ProviderKey[]).map((k) => `${k}=${providerState(k).state}`).join(" ")),
-  );
+  console.log(`  Gemini:          ${geminiState().state}`);
+  void probe().then(() => console.log(`  Probe:           gemini=${geminiState().state}`));
   console.log(`  Budget:         $${budget.cap().toFixed(2)} (set DEMO_BUDGET_USD)`);
 });

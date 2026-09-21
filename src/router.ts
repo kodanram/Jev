@@ -1,5 +1,5 @@
 import { choice, noul, score } from "@typesafe-ai/sdk";
-import { PROVIDERS, type ModelKey, type ProviderKey, type Tier } from "./config.ts";
+import { GEMINI, type ModelKey, type Tier } from "./config.ts";
 import { jevCall } from "./jev.ts";
 
 const TIERS: Tier[] = ["light", "standard", "frontier"];
@@ -35,7 +35,6 @@ export interface RouteDecision extends Raw {
   tier: Tier;
   /** True when the confidence guard moved the request up one tier. */
   escalated: boolean;
-  provider: ProviderKey;
   model: ModelKey;
   latencyMs: number;
   inputTokens: number;
@@ -65,7 +64,7 @@ function heuristic(prompt: string): Raw {
   };
 }
 
-export async function decide(prompt: string, provider: ProviderKey): Promise<RouteDecision> {
+export async function decide(prompt: string): Promise<RouteDecision> {
   const r = await jevCall(
     prompt.slice(0, 60_000),
     routingQuestions,
@@ -81,5 +80,5 @@ export async function decide(prompt: string, provider: ProviderKey): Promise<Rou
   const idx = TIERS.indexOf(r.value.jevTier);
   const escalated = r.value.confidence < MIN_CONFIDENCE && idx < TIERS.length - 1;
   const tier = escalated ? TIERS[idx + 1]! : r.value.jevTier;
-  return { ...r.value, tier, escalated, provider, model: PROVIDERS[provider].tiers[tier], latencyMs: r.latencyMs, inputTokens: r.inputTokens, costUsd: r.costUsd, simulated: r.simulated };
+  return { ...r.value, tier, escalated, model: GEMINI.tiers[tier], latencyMs: r.latencyMs, inputTokens: r.inputTokens, costUsd: r.costUsd, simulated: r.simulated };
 }

@@ -75,7 +75,7 @@ select { background: var(--bg); color: var(--ink); border: 1px solid var(--line)
 
 /* badges: tinted, not filled */
 .badge { --bc: var(--k7); display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--bc); background: color-mix(in srgb, var(--bc) 12%, transparent); border: 1px solid color-mix(in srgb, var(--bc) 30%, transparent); }
-.badge.light, .badge.haiku, .badge.kimiK26 { --bc: var(--k2); } .badge.standard, .badge.sonnet { --bc: var(--k1); } .badge.frontier, .badge.opus, .badge.kimiK3 { --bc: var(--k5); }
+.badge.light, .badge.geminiFlashLite { --bc: var(--k2); } .badge.standard, .badge.geminiFlash { --bc: var(--k1); } .badge.frontier, .badge.geminiPro { --bc: var(--k5); }
 .badge.jev { --bc: var(--accent); } .badge.llm { --bc: var(--muted); }
 .badge.escalate { --bc: var(--neg); } .badge.auto-reply { --bc: var(--pos); } .badge.discard { --bc: var(--k7); }
 .badge.sim { --bc: var(--muted); font-weight: 500; }

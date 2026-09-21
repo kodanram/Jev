@@ -1,6 +1,6 @@
 import { choice, noul, score } from "@typesafe-ai/sdk";
 import { z } from "zod";
-import { PROVIDERS, usable, type ProviderKey } from "./config.ts";
+import { GEMINI, geminiUsable } from "./config.ts";
 import { jevCall } from "./jev.ts";
 import { complete, parseWith, type Completion } from "./llm.ts";
 
@@ -87,19 +87,19 @@ export const triageWithJev = async (ticket: string): Promise<TimedTriage> => {
 
 const LlmTriageSchema = z.object({
   department: z.enum(["billing", "technical", "account", "sales", "other"]),
-  urgency: z.number().describe("0 no pressure, 1 this week, 2 needs reply today, 3 production down or money at risk"),
-  frustration: z.number().describe("0 calm, 1 mildly annoyed, 2 angry, 3 furious"),
-  refundRequested: z.number().describe("Probability 0-1 that the customer explicitly asks for a refund"),
-  churnRisk: z.number().describe("Probability 0-1 that the customer may cancel"),
-  spam: z.number().describe("Probability 0-1 that this is spam or not a support request"),
+  urgency: z.number().min(0).max(3).describe("0 no pressure, 1 this week, 2 needs reply today, 3 production down or money at risk"),
+  frustration: z.number().min(0).max(3).describe("0 calm, 1 mildly annoyed, 2 angry, 3 furious"),
+  refundRequested: z.number().min(0).max(1).describe("Probability 0-1 that the customer explicitly asks for a refund"),
+  churnRisk: z.number().min(0).max(1).describe("Probability 0-1 that the customer may cancel"),
+  spam: z.number().min(0).max(1).describe("Probability 0-1 that this is spam or not a support request"),
 });
 
 /** Baseline: the same six judgements made by the provider's small LLM (the cheap, fast option). */
-export async function triageWithLlm(ticket: string, provider: ProviderKey): Promise<TimedTriage | null> {
-  if (!usable(provider)) return null;
+export async function triageWithLlm(ticket: string): Promise<TimedTriage | null> {
+  if (!geminiUsable()) return null;
   let r;
   try {
-    r = await parseWith(PROVIDERS[provider].small, LlmTriageSchema, ticket, "You triage customer-support tickets. Return the requested fields for the ticket.");
+    r = await parseWith(GEMINI.small, LlmTriageSchema, ticket, "You triage customer-support tickets. Return the requested fields for the ticket.");
   } catch {
     return null; // baseline unavailable (spend cap or rate limit): the UI shows the lane as n/a
   }
@@ -141,10 +141,9 @@ function heuristic(ticket: string): Triage {
 }
 
 /** Drafts the first reply; escalated tickets get the bigger model. */
-export async function draftReply(ticket: string, department: string, action: Action, provider: ProviderKey): Promise<Completion | null> {
+export async function draftReply(ticket: string, department: string, action: Action): Promise<Completion | null> {
   if (action === "discard") return null;
-  const p = PROVIDERS[provider];
-  return complete(action === "escalate" ? p.mid : p.small, ticket, {
+  return complete(action === "escalate" ? GEMINI.mid : GEMINI.small, ticket, {
     system:
       `You are a support agent for a SaaS company. The ticket was routed to ${department}. ` +
       (action === "escalate"

@@ -7,7 +7,7 @@ const el = (tag, attrs = {}, parent) => {
   return n;
 };
 // Colours are CSS variables so the diagrams follow the light/dark theme.
-const COLORS = { jev: "var(--accent)", io: "var(--muted)", llm: "var(--muted)", good: "var(--pos)", code: "var(--k1)", light: "var(--k2)", standard: "var(--k1)", frontier: "var(--k5)", haiku: "var(--k2)", sonnet: "var(--k1)", opus: "var(--k5)", kimiK26: "var(--k2)", kimiK3: "var(--k5)" };
+const COLORS = { jev: "var(--accent)", io: "var(--muted)", llm: "var(--muted)", good: "var(--pos)", code: "var(--k1)", light: "var(--k2)", standard: "var(--k1)", frontier: "var(--k5)", geminiFlashLite: "var(--k2)", geminiFlash: "var(--k1)", geminiPro: "var(--k5)" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**

@@ -26,3 +26,36 @@ scripts/
 ROUTING_SETUP.md
 SETUP_COMPLETE.txt
 verify-setup.sh
+
+# Python virtual environment
+.venv/
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# NPM logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

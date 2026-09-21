@@ -1,6 +1,6 @@
 import { choice, noul, score } from "@typesafe-ai/sdk";
 import { z } from "zod";
-import { PROVIDERS, usable, type ProviderKey } from "./config.ts";
+import { GEMINI, geminiUsable } from "./config.ts";
 import { jevCall, type Timed } from "./jev.ts";
 import { parseWith } from "./llm.ts";
 
@@ -70,17 +70,17 @@ export const classifyEmailWithJev = (email: string): Promise<Timed<InboxLabel>> 
 
 const InboxLlmSchema = z.object({
   category: z.enum(EMAIL_CATEGORIES),
-  urgency: z.number().describe("0 ignore, 1 low, 2 reply today, 3 critical within 30 minutes"),
-  scam: z.number().describe("Probability 0-1 the email is a scam"),
-  needsReply: z.number().describe("Probability 0-1 the email needs a personal reply"),
+  urgency: z.number().min(0).max(3).describe("0 ignore, 1 low, 2 reply today, 3 critical within 30 minutes"),
+  scam: z.number().min(0).max(1).describe("Probability 0-1 the email is a scam"),
+  needsReply: z.number().min(0).max(1).describe("Probability 0-1 the email needs a personal reply"),
 });
 
 /** Baseline: the provider's small LLM answering the same questions. Null when it can't run. */
-export async function classifyEmailWithLlm(email: string, provider: ProviderKey) {
-  if (!usable(provider)) return null;
+export async function classifyEmailWithLlm(email: string) {
+  if (!geminiUsable()) return null;
   let r;
   try {
-    r = await parseWith(PROVIDERS[provider].small, InboxLlmSchema, email, "You triage the inbox of a busy content creator. Return the requested fields for the email.");
+    r = await parseWith(GEMINI.small, InboxLlmSchema, email, "You triage the inbox of a busy content creator. Return the requested fields for the email.");
   } catch {
     return null;
   }
@@ -172,7 +172,7 @@ export const scoreTitle = (title: string, topic: string): Promise<Timed<TitleSco
 
 const TitlesSchema = z.object({ titles: z.array(z.string()) });
 
-export async function generateTitles(topic: string, n: number, provider: ProviderKey) {
+export async function generateTitles(topic: string, n: number) {
   const simulated = async () => {
     const seeds = [
       `${topic}: the complete beginner tutorial`, `I built an AI agent with ${topic} in 20 minutes`, `${topic} is INSANE (you won't believe this)`,
@@ -182,10 +182,10 @@ export async function generateTitles(topic: string, n: number, provider: Provide
     ];
     return { titles: seeds.slice(0, n), simulated: true, latencyMs: 300, costUsd: 0 };
   };
-  if (!usable(provider)) return simulated();
+  if (!geminiUsable()) return simulated();
   let r;
   try {
-    r = await parseWith(PROVIDERS[provider].small, TitlesSchema, `Topic: ${topic}\nWrite ${n} distinct YouTube video titles, varied in style (tutorial, curiosity, comparison, hype, specific outcome). Titles only.`, "You write YouTube titles for a developer audience.");
+    r = await parseWith(GEMINI.small, TitlesSchema, `Topic: ${topic}\nWrite ${n} distinct YouTube video titles, varied in style (tutorial, curiosity, comparison, hype, specific outcome). Titles only.`, "You write YouTube titles for a developer audience.");
   } catch {
     return simulated();
   }
